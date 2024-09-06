@@ -1,4 +1,4 @@
-# Nostr Undocumented Design (NUD) for Scrobbling
+# NUD (Nostr Unofficial Document) for Scrobbling
 
 This repository contains projects and specifications related to music scrobbling on the Nostr protocol.
 
