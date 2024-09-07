@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,46 +15,71 @@ import (
 )
 
 var (
-	artists = []string{
-		"The Beatles", "Queen", "Pink Floyd", "Led Zeppelin", "Radiohead",
-		"David Bowie", "Nirvana", "The Rolling Stones", "Coldplay", "U2",
-		"Metallica", "Muse", "Arctic Monkeys", "Oasis", "The Killers",
-		"Foo Fighters", "Red Hot Chili Peppers", "Green Day", "The Strokes", "Blur",
-		"Arcade Fire", "Tame Impala", "The White Stripes", "Gorillaz", "Daft Punk",
+	secretKeys = []string{
+		nostr.GeneratePrivateKey(),
+		nostr.GeneratePrivateKey(),
+		nostr.GeneratePrivateKey(),
+		nostr.GeneratePrivateKey(),
+		nostr.GeneratePrivateKey(),
+		nostr.GeneratePrivateKey(),
+		nostr.GeneratePrivateKey(),
+		nostr.GeneratePrivateKey(),
+		nostr.GeneratePrivateKey(),
+		nostr.GeneratePrivateKey(),
 	}
-	songs = []string{
-		"Bohemian Rhapsody", "Stairway to Heaven", "Imagine", "Comfortably Numb", "Hey Jude",
-		"Space Oddity", "Smells Like Teen Spirit", "(I Can't Get No) Satisfaction", "Viva la Vida", "With or Without You",
-		"Enter Sandman", "Supermassive Black Hole", "Do I Wanna Know?", "Wonderwall", "Mr. Brightside",
-		"Everlong", "Californication", "American Idiot", "Last Nite", "Song 2",
-		"Wake Up", "The Less I Know The Better", "Seven Nation Army", "Feel Good Inc.", "Get Lucky",
-	}
+	testSongs []string
 )
 
+func init() {
+	// Load test songs from file
+	file, err := os.Open("test_songs.txt")
+	if err != nil {
+		panic("Failed to open test_songs.txt: " + err.Error())
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		testSongs = append(testSongs, scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		panic("Error reading test_songs.txt: " + err.Error())
+	}
+}
+
+func getRandomSong() (string, string) {
+	if len(testSongs) == 0 {
+		return "Default Song", "Default Artist"
+	}
+	song := testSongs[rand.Intn(len(testSongs))]
+	parts := strings.Split(song, " - ")
+	if len(parts) != 2 {
+		return song, "Unknown Artist"
+	}
+	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+}
+
 func TestGenerateAndPublishScrobbles(t *testing.T) {
-	relay, err := nostr.RelayConnect(context.Background(), "ws://relay.home.lan")
+	relay, err := nostr.RelayConnect(context.Background(), "ws://localhost:8081")
 	if err != nil {
 		t.Fatalf("Failed to connect to relay: %v", err)
 	}
 	defer relay.Close()
 
-	// Generate and publish 10 random scrobbles
-	for i := 0; i < 10000; i++ {
+	// Generate and publish 10000 random scrobbles
+	for i := 0; i < 1000; i++ {
 		event := generateRandomScrobble()
-		fmt.Printf("%v\n", event)
 		err := relay.Publish(context.Background(), *event)
 		if err != nil {
 			t.Errorf("Failed to publish event: %v", err)
-		} else {
-			t.Logf("Published scrobble: %s - %s by %s", event.Tags.GetFirst([]string{"artist"}), event.Tags.GetFirst([]string{"track"}), event.PubKey)
 		}
 	}
 }
 
 func generateRandomScrobble() *nostr.Event {
-	artist := artists[rand.Intn(len(artists))]
-	track := songs[rand.Intn(len(songs))]
-	sk := nostr.GeneratePrivateKey()
+	track, artist := getRandomSong()
+	sk := secretKeys[rand.Intn(len(secretKeys))]
 	pk, err := nostr.GetPublicKey(sk)
 	if err != nil {
 		panic(err)
@@ -71,8 +99,4 @@ func generateRandomScrobble() *nostr.Event {
 
 	event.Sign(sk)
 	return &event
-}
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
 }

@@ -1,6 +1,6 @@
 cffi==1.17.1
 cryptography==43.0.1
-nostr==0.0.2
+nostr-sdk==0.34.0
 numpy==2.1.1
 pandas==2.2.2
 pycparser==2.22

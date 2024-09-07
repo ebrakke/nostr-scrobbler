@@ -7,7 +7,10 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/fiatjaf/eventstore/lmdb"
+	"github.com/fiatjaf/khatru"
 	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip19"
 )
 
 type RelayStats struct {
@@ -51,20 +54,35 @@ func (s *ScrobbleStats) AddScrobble(relayURL, pubkey, artist, track string) {
 
 func main() {
 	stats := NewScrobbleStats()
-	go collectStats(stats, "ws://relay.home.lan")
-	// Set up web server
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	relay := khatru.NewRelay()
+
+	relay.Info.Name = "Scrobbler Relay"
+
+	db := lmdb.LMDBBackend{
+		MaxLimit: 100000,
+		Path:     "./db",
+	}
+	if err := db.Init(); err != nil {
+		panic(err)
+	}
+	relay.StoreEvent = append(relay.StoreEvent, db.SaveEvent)
+	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
+	relay.QueryEvents = append(relay.QueryEvents, db.QueryEvents)
+
+	mux := relay.Router()
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		renderStats(w, stats)
 	})
 
-	http.HandleFunc("/connect", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/connect", func(w http.ResponseWriter, r *http.Request) {
 		relay := r.FormValue("relay")
 		go collectStats(stats, relay)
 		renderStats(w, stats)
 	})
 
 	log.Println("Starting server on :8081")
-	log.Fatal(http.ListenAndServe(":8081", nil))
+	log.Fatal(http.ListenAndServe(":8081", relay))
 }
 
 func collectStats(stats *ScrobbleStats, relayURL string) {
@@ -136,8 +154,8 @@ func renderStats(w http.ResponseWriter, stats *ScrobbleStats) {
                     <table id="artist-table" class="table-auto w-full sortable">
                         <thead>
                             <tr>
-                                <th class="cursor-pointer" onclick="sortTable(this, 'artists-{{$relayURL}}')">Artist</th>
-                                <th class="cursor-pointer" onclick="sortTable(this, 'artists-{{$relayURL}}')">Count</th>
+                                <th class="cursor-pointer">Artist</th>
+                                <th class="cursor-pointer">Count</th>
                             </tr>
                         </thead>
                         <tbody id="artists-{{$relayURL}}">
@@ -156,8 +174,8 @@ func renderStats(w http.ResponseWriter, stats *ScrobbleStats) {
                     <table id="songs-table" class="table-auto w-full sortable">
                         <thead>
                             <tr>
-                                <th class="cursor-pointer" onclick="sortTable(this, 'songs-{{$relayURL}}')">Song</th>
-                                <th class="cursor-pointer" onclick="sortTable(this, 'songs-{{$relayURL}}')">Count</th>
+                                <th class="cursor-pointer">Song</th>
+                                <th class="cursor-pointer">Count</th>
                             </tr>
                         </thead>
                         <tbody id="songs-{{$relayURL}}">
@@ -176,14 +194,14 @@ func renderStats(w http.ResponseWriter, stats *ScrobbleStats) {
                     <table id="users-table" class="table-auto w-full sortable">
                         <thead>
                             <tr>
-                                <th class="cursor-pointer" onclick="sortTable(this, 'users-{{$relayURL}}')">User</th>
-                                <th class="cursor-pointer" onclick="sortTable(this, 'users-{{$relayURL}}')">Count</th>
+                                <th class="cursor-pointer">User</th>
+                                <th class="cursor-pointer">Count</th>
                             </tr>
                         </thead>
                         <tbody id="users-{{$relayURL}}">
                             {{range $user, $count := $relay.UserScrobbles}}
                             <tr>
-                                <td>{{$user}}</td>
+                                <td>{{$user | npubEncode}}</td>
                                 <td>{{$count}}</td>
                             </tr>
                             {{end}}
@@ -198,7 +216,22 @@ func renderStats(w http.ResponseWriter, stats *ScrobbleStats) {
 </html>
 `
 
-	t, err := template.New("stats").Parse(tmpl)
+	funcMap := template.FuncMap{
+		"npubEncode": func(pubkey string) string {
+			npub, err := nip19.EncodePublicKey(pubkey)
+			if err != nil {
+				return pubkey // Return original if encoding fails
+			}
+
+			// Truncate the npub
+			if len(npub) > 15 {
+				return npub[:7] + "..." + npub[len(npub)-8:]
+			}
+			return npub
+		},
+	}
+
+	t, err := template.New("stats").Funcs(funcMap).Parse(tmpl)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

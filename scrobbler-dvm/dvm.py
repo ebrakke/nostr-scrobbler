@@ -1,48 +1,41 @@
 import asyncio
 import json
-import ssl
-import time
 import pandas as pd
-from nostr.filter import Filter, Filters
-from nostr.event import EventKind
-from nostr.relay_manager import RelayManager
-from nostr.message_type import ClientMessageType
+from nostr_sdk import Client, Filter, EventSource, init_logger, LogLevel, Kind
+from datetime import timedelta
 
 async def connect_and_process():
-    filters = Filters([Filter(kinds=[2002])])
-    subscription_id = "scrobble_subscription"
-    request = [ClientMessageType.REQUEST, subscription_id]
-    request.extend(filters.to_json_array())
+    # Init logger
+    init_logger(LogLevel.INFO)
 
-    relay_manager = RelayManager()
-    relay_manager.add_relay("ws://relay.home.lan")
-    relay_manager.add_subscription(subscription_id, filters)
-    relay_manager.open_connections({"cert_reqs": ssl.CERT_NONE})
-    
-    await asyncio.sleep(1.25)  # allow the connections to open
+    # Initialize client without signer
+    client = Client()
 
-    message = json.dumps(request)
-    relay_manager.publish_message(message)
-    await asyncio.sleep(1)  # allow the messages to send
+    # Add relay and connect
+    await client.add_relays(["ws://localhost:8081"])
+    await client.connect()
+
+    # Create filter for kind 2002 events
+    f = Filter().kinds([Kind(2002)])
 
     scrobbles = []
-    while relay_manager.message_pool.has_events():
-        event_msg = relay_manager.message_pool.get_event()
-        
-        # Convert tags to a dictionary
-        tags_dict = {tag[0]: tag[1] for tag in event_msg.event.tags if len(tag) >= 2}
-        
+    source = EventSource.relays(timedelta(seconds=60))  # Adjust the timeout as needed
+
+    events = await client.get_events_of([f], source)
+
+    for event in events:
+        ev = json.loads(event.as_json())
+        tags_dict = { tag[0]: tag[1] for tag in ev.get('tags') }
         scrobbles.append({
-            'artist': tags_dict.get('artist', 'Unknown'),
-            'title': tags_dict.get('track', 'Unknown'),
-            'timestamp': event_msg.event.created_at
+            'artist': tags_dict.get('artist'),
+            'title': tags_dict.get('track'),
+            'timestamp': ev.get('created_at'),
+            'pubkey': ev.get('pubkey')  # Add this line to include the pubkey
         })
         
-        # Perform analysis every 100 scrobbles
-        if len(scrobbles) % 100 == 0:
-            analyze_scrobbles(scrobbles)
-
-    relay_manager.close_connections()
+        # Perform analysis every 1000 scrobbles
+    analyze_scrobbles(scrobbles)
+    print(f"Processed {len(events)} events")
 
 def analyze_scrobbles(scrobbles):
     df = pd.DataFrame(scrobbles)
@@ -61,6 +54,11 @@ def analyze_scrobbles(scrobbles):
     print("\nTop 5 Tracks:")
     print(top_tracks)
     
+    # Top 5 listeners
+    top_listeners = df['pubkey'].value_counts().head()
+    print("\nTop 5 Listeners:")
+    print(top_listeners)
+    
     # Scrobbles per day
     df['date'] = df['timestamp'].dt.date
     scrobbles_per_day = df.groupby('date').size()
@@ -70,6 +68,8 @@ def analyze_scrobbles(scrobbles):
     df['hour'] = df['timestamp'].dt.hour
     most_active_hour = df['hour'].value_counts().idxmax()
     print(f"\nMost active hour: {most_active_hour}:00 - {most_active_hour+1}:00")
+
+    
 
 if __name__ == "__main__":
     asyncio.run(connect_and_process())
