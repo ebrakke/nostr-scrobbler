@@ -1,0 +1,12 @@
+cffi==1.17.1
+cryptography==43.0.1
+nostr==0.0.2
+numpy==2.1.1
+pandas==2.2.2
+pycparser==2.22
+python-dateutil==2.9.0.post0
+pytz==2024.1
+secp256k1==0.14.0
+six==1.16.0
+tzdata==2024.1
+websocket-client==1.8.0
