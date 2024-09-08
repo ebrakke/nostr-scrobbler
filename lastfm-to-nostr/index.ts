@@ -26,12 +26,26 @@ async function getLastFmScrobbles(page = 1, limit = 200): Promise<any[]> {
   return data.recenttracks.track;
 }
 
+async function fetchNowPlaying() {
+  const url = `http://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${LASTFM_USERNAME}&api_key=${LASTFM_API_KEY}&format=json`;
+  const response = await fetch(url);
+  const data = await response.json();
+  const mostRecent = data.recenttracks.track[0]
+  if (mostRecent['@attr'] && mostRecent['@attr'].nowplaying !== 'true') {
+      console.log('not playing')
+      return
+  }
+  return mostRecent
+}
+
 // Function to convert Last.fm scrobble to Nostr event
 function scrobbleToNostrEvent(scrobble: any, ndk: NDK): NDKEvent {
   const content = `${scrobble.name} by ${scrobble.artist['#text']}`;
   const timestamp = parseInt(scrobble.date.uts);
   const tags = [
     ['i', `mbid:recording:${scrobble.mbid}`],
+    ['i', `mbid:release:${scrobble.album.mbid}`],
+    ['r', scrobble.image[2]['#text']],
     ['artist', scrobble.artist['#text']],
     ['album', scrobble.album['#text']],
     ['track', scrobble.name],
@@ -56,15 +70,9 @@ async function getExistingScrobbles(ndk: NDK): Promise<Set<number>> {
   return new Set(Array.from(events).map(event => event.created_at as number));
 }
 
-// Main function
-async function main() {
-  const relayUrl = 'wss://relay.nostr-music.cc'; // Example relay, you can change this
-  const ndk = new NDK({ explicitRelayUrls: [relayUrl], signer });
-  await ndk.connect();
-
+async function syncHistory(ndk: NDK) {
   let page = 1;
   let scrobbles: any[];
-
   // Fetch existing scrobbles
   const existingScrobbles = await getExistingScrobbles(ndk);
   console.log(`Found ${existingScrobbles.size} existing scrobbles`);
@@ -86,8 +94,30 @@ async function main() {
     page++;
     await Bun.sleep(2000)
   } while (scrobbles.length > 0);
+}
 
-  console.log('Finished publishing all new scrobbles');
+async function getLastPlayingEvent(ndk: NDK) {
+  const nowPlaying = await fetchNowPlaying()
+  const event = scrobbleToNostrEvent(nowPlaying, ndk)
+  return event;
+}
+
+// Main function
+async function main() {
+  const relayUrl = 'wss://relay.nostr-music.cc'; // Example relay, you can change this
+  const ndk = new NDK({ explicitRelayUrls: [relayUrl], signer });
+  let lastPlaying= '';
+  await ndk.connect();
+  while (true) {
+    const event = await getLastPlayingEvent(ndk)
+    if (event.content !== lastPlaying) {
+      lastPlaying = event.content
+      console.log(`Now playing: ${event.content}`)
+      await event.publish()
+      console.log(event.rawEvent())
+    }
+    await Bun.sleep(20000)
+  }
 }
 
 main().catch(console.error);
