@@ -5,10 +5,12 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 
 	"github.com/fiatjaf/eventstore/lmdb"
 	"github.com/fiatjaf/khatru"
+	"github.com/joho/godotenv"
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
 )
@@ -53,14 +55,24 @@ func (s *ScrobbleStats) AddScrobble(relayURL, pubkey, artist, track string) {
 }
 
 func main() {
+	// Load .env file
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
 	stats := NewScrobbleStats()
 	relay := khatru.NewRelay()
 
-	relay.Info.Name = "Scrobbler Relay"
+	// Use environment variables for configuration
+	relay.Info.Name = getEnv("RELAY_NAME", "Scrobbler Relay")
+	relay.Info.URL = getEnv("RELAY_URL", "ws://localhost")
+	dbPath := getEnv("DB_PATH", "./db")
+	port := getEnv("PORT", "8080")
 
 	db := lmdb.LMDBBackend{
 		MaxLimit: 100000,
-		Path:     "./db",
+		Path:     dbPath,
 	}
 	if err := db.Init(); err != nil {
 		panic(err)
@@ -69,6 +81,13 @@ func main() {
 	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
 	relay.QueryEvents = append(relay.QueryEvents, db.QueryEvents)
 
+	relay.RejectEvent = append(relay.RejectEvent, func(ctx context.Context, ev *nostr.Event) (bool, string) {
+		if ev.Kind != 2002 {
+			return true, "Only kind 2002 (scrobble) events are allowed"
+		}
+		return false, ""
+	})
+	go collectSelfStats(stats, relay)
 	mux := relay.Router()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -81,8 +100,8 @@ func main() {
 		renderStats(w, stats)
 	})
 
-	log.Println("Starting server on :8081")
-	log.Fatal(http.ListenAndServe(":8081", relay))
+	log.Printf("Starting server on :%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, relay))
 }
 
 func collectStats(stats *ScrobbleStats, relayURL string) {
@@ -104,6 +123,28 @@ func collectStats(stats *ScrobbleStats, relayURL string) {
 		artist := getTagValue(ev.Tags, "artist")
 		track := getTagValue(ev.Tags, "track")
 		stats.AddScrobble(relayURL, ev.PubKey, artist, track)
+	}
+}
+
+func collectSelfStats(stats *ScrobbleStats, relay *khatru.Relay) {
+	r, err := nostr.RelayConnect(context.Background(), relay.Info.URL)
+	if err != nil {
+		log.Printf("Failed to connect to relay %s: %v", relay.Info.URL, err)
+		return
+	}
+
+	sub, err := r.Subscribe(context.Background(), []nostr.Filter{{
+		Kinds: []int{2002},
+		Limit: 10000,
+	}})
+	if err != nil {
+		log.Fatalf("Failed to subscribe: %v", err)
+	}
+
+	for ev := range sub.Events {
+		artist := getTagValue(ev.Tags, "artist")
+		track := getTagValue(ev.Tags, "track")
+		stats.AddScrobble(relay.Info.URL, ev.PubKey, artist, track)
 	}
 }
 
@@ -134,6 +175,7 @@ func renderStats(w http.ResponseWriter, stats *ScrobbleStats) {
 <body class="bg-gray-100">
     <div class="container mx-auto px-4 py-8">
         <h1 class="text-4xl font-bold mb-8">Scrobble Stats</h1>
+		<a href="https://www.last.fm/about/trackmymusic" rel="noopener noreferrer" target="_blank" class="text-sm text-gray-500">What is a scrobble?</a>
         
         <form hx-post="/connect" hx-swap="innerHTML" hx-target="body" class="mb-8">
             <input type="text" name="relay" placeholder="Enter relay URL" class="p-2 border rounded mr-2">
@@ -201,7 +243,11 @@ func renderStats(w http.ResponseWriter, stats *ScrobbleStats) {
                         <tbody id="users-{{$relayURL}}">
                             {{range $user, $count := $relay.UserScrobbles}}
                             <tr>
-                                <td>{{$user | npubEncode}}</td>
+                                <td>
+									<a href="https://ditto.pub/{{$user | npubEncode}}" target="_blank" rel="noopener noreferrer">
+										<span>{{$user | npubEncode | truncate}}</span>
+									</a>
+								</td>
                                 <td>{{$count}}</td>
                             </tr>
                             {{end}}
@@ -211,8 +257,7 @@ func renderStats(w http.ResponseWriter, stats *ScrobbleStats) {
             </div>
         </div>
         {{end}}
-    </div>
-</body>
+    </div> </body>
 </html>
 `
 
@@ -224,10 +269,13 @@ func renderStats(w http.ResponseWriter, stats *ScrobbleStats) {
 			}
 
 			// Truncate the npub
-			if len(npub) > 15 {
-				return npub[:7] + "..." + npub[len(npub)-8:]
-			}
 			return npub
+		},
+		"truncate": func(s string) string {
+			if len(s) > 10 {
+				return s[:10] + "..." + s[len(s)-8:]
+			}
+			return s
 		},
 	}
 
@@ -244,4 +292,12 @@ func renderStats(w http.ResponseWriter, stats *ScrobbleStats) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// Helper function to get environment variables with a default value
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+	return fallback
 }

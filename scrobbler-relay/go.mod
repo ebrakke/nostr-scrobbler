@@ -8,6 +8,7 @@ require (
 	github.com/fiatjaf/eventstore v0.5.1
 	github.com/fiatjaf/khatru v0.8.0
 	github.com/google/uuid v1.3.0
+	github.com/joho/godotenv v1.5.1
 	github.com/nbd-wtf/go-nostr v0.34.5
 )
 

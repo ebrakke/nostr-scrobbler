@@ -44,3 +44,10 @@ Kind - 2002
   "sig": "eb359d95e3a321b8cfb95adafba95a14010941430edd4b3c015b1f0650bfe39a5cf149593ca1c4771a0bc1a983ba0315b91acd705efa243f0bebe2b3e59a5632"
 }
 ```
+
+The `i` tag should contain a way to find a reference to the track outside of NOSTR.
+
+Examples:
+`mbid:recording:{mbid}` - would refernece the track on musicbrainz.
+`spotify:track:{spotify_id}` - would reference the track on spotify.
+`youtube:video:{youtube_id}` - would reference the track on youtube.

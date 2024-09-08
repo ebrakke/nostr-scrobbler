@@ -1,5 +1,6 @@
 import { config } from 'dotenv';
-import { SimplePool, getPublicKey, getEventHash, finalizeEvent, nip19, type EventTemplate } from 'nostr-tools';
+import NDK, { NDKEvent, NDKKind, NDKPrivateKeySigner } from '@nostr-dev-kit/ndk';
+import { nip19 } from 'nostr-tools';
 
 // Load environment variables
 config();
@@ -14,8 +15,8 @@ if (!LASTFM_API_KEY || !LASTFM_USERNAME || !NOSTR_NSEC) {
 }
 
 // Decode the nsec to get the private key
-const privateKey = nip19.decode(NOSTR_NSEC).data as Uint8Array;
-const publicKey = getPublicKey(privateKey);
+const privateKey = nip19.decode(NOSTR_NSEC).data as string;
+const signer = new NDKPrivateKeySigner(privateKey);
 
 // Function to fetch Last.fm scrobbles
 async function getLastFmScrobbles(page = 1, limit = 200): Promise<any[]> {
@@ -26,7 +27,7 @@ async function getLastFmScrobbles(page = 1, limit = 200): Promise<any[]> {
 }
 
 // Function to convert Last.fm scrobble to Nostr event
-function scrobbleToNostrEvent(scrobble: any) {
+function scrobbleToNostrEvent(scrobble: any, ndk: NDK): NDKEvent {
   const content = `${scrobble.name} by ${scrobble.artist['#text']}`;
   const timestamp = parseInt(scrobble.date.uts);
   const tags = [
@@ -34,43 +35,59 @@ function scrobbleToNostrEvent(scrobble: any) {
     ['artist', scrobble.artist['#text']],
     ['album', scrobble.album['#text']],
     ['track', scrobble.name],
-  ]
-  const event: EventTemplate = {
-    kind: 2002,
-    created_at: timestamp,
-    tags,
-    content
-  };
+  ];
+  
+  const event = new NDKEvent(ndk);
+  event.kind = 2002;
+  event.created_at = timestamp;
+  event.tags = tags;
+  event.content = content;
 
-  const signedEvent = finalizeEvent(event, privateKey);
-  return signedEvent;
+  return event;
 }
 
-// Function to publish event to a relay
-async function publishToRelay(event: any, relayUrl: string) {
-  const pool = new SimplePool();
-  await Promise.all(pool.publish([relayUrl], event));
+// Function to fetch existing scrobble events from the relay
+async function getExistingScrobbles(ndk: NDK): Promise<Set<number>> {
+  const events = await ndk.fetchEvents({
+    kinds: [2002 as NDKKind],
+    authors: [ndk.activeUser!.pubkey as string],
+  });
+  
+  return new Set(Array.from(events).map(event => event.created_at as number));
 }
 
 // Main function
 async function main() {
-  const relayUrl = 'ws://localhost:8081'; // Example relay, you can change this
+  const relayUrl = 'wss://relay.nostr-music.cc'; // Example relay, you can change this
+  const ndk = new NDK({ explicitRelayUrls: [relayUrl], signer });
+  await ndk.connect();
+
   let page = 1;
   let scrobbles: any[];
 
-  
+  // Fetch existing scrobbles
+  const existingScrobbles = await getExistingScrobbles(ndk);
+  console.log(`Found ${existingScrobbles.size} existing scrobbles`);
+
   do {
     scrobbles = await getLastFmScrobbles(page);
     for (const scrobble of scrobbles) {
-      const event = scrobbleToNostrEvent(scrobble);
-      await publishToRelay(event, relayUrl);
-      console.log(`Published scrobble: ${scrobble.name} by ${scrobble.artist['#text']}`);
+      const timestamp = parseInt(scrobble.date.uts);
+      
+      // Check if the scrobble already exists
+      if (!existingScrobbles.has(timestamp)) {
+        const event = scrobbleToNostrEvent(scrobble, ndk);
+        await event.publish();
+        console.log(`Published scrobble: ${scrobble.name} by ${scrobble.artist['#text']}`);
+      } else {
+        console.log(`Skipping duplicate scrobble: ${scrobble.name} by ${scrobble.artist['#text']}`);
+      }
     }
     page++;
-    await Bun.sleep(1000);
+    await Bun.sleep(2000)
   } while (scrobbles.length > 0);
 
-  console.log('Finished publishing all scrobbles');
+  console.log('Finished publishing all new scrobbles');
 }
 
 main().catch(console.error);

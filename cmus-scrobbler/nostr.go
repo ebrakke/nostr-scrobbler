@@ -80,7 +80,7 @@ func (n *Nostr) CreateScrobbleEvent(scrobble ScrobbleEvent) (*nostr.Event, error
 	}
 
 	ev.Tags = append(ev.Tags, nostr.Tag{"artist", scrobble.Artist})
-	ev.Tags = append(ev.Tags, nostr.Tag{"title", scrobble.Track})
+	ev.Tags = append(ev.Tags, nostr.Tag{"track", scrobble.Track})
 	ev.Tags = append(ev.Tags, nostr.Tag{"album", scrobble.Album})
 	ev.Tags = append(ev.Tags, nostr.Tag{"mbid", scrobble.MbID})
 

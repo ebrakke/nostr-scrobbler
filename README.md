@@ -51,3 +51,33 @@ The Scrobble Event is a proposed Nostr event type for recording music listening 
 }
 ```
 
+
+Audio Events - from [Add audio track NIP](https://github.com/nostr-protocol/nips/pull/1043)
+---------------
+
+```json
+{
+  "id": <event_id>,
+  "pubkey": <author_pubkey>,
+  "created_at": <created_at>,
+  "kind": 31337,
+  "content": "Chill beats",
+  "tags": [
+    ["d", "<id>"],
+    ["c", "Pop", "genre"],
+    ["c", "EDM", "subgenre"],
+    ["c", "Columbia Records", "record_label"],
+    ["c", "AC/DC", "artist"],
+    ["i", "podcast:item:guid:123", "https://fountain.fm/episode/30uEXC25615Ze2ELjY2p"],
+    ["p", "2a07724d42fd8004b5c97b62ba03b6baf3919f9e8211667039987866997e97ad", "wss://my-relay.com", "AC/DC"],
+    ["title", "Platinum Robots on the Moon"],
+    ["subject", "Platinum Robots on the Moon"],
+    ["published_at", "<published_at>"],
+    ["imeta", "url https://example.com/my-track.m3u8", "x <hash>", ...]
+  ]
+}
+```
+
+Music Playlist
+---------------
+| Music Playlist | 30037 | a list of kind `31337` music tracks | `"a"` (kind:31337 music tracks)
