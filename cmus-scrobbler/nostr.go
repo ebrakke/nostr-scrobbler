@@ -135,6 +135,20 @@ func (n *Nostr) QueryRecentScrobbles(limit int) ([]nostr.Event, error) {
 
 	return allEvents, nil
 }
+
+func (n *Nostr) GetLastScrobble() (*nostr.Event, error) {
+	events, err := n.QueryRecentScrobbles(1)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(events) == 0 {
+		return nil, nil
+	}
+
+	return &events[0], nil
+}
+
 func PrintScrobbles(events []nostr.Event) {
 	fmt.Println("Recent scrobbles:")
 	for _, ev := range events {

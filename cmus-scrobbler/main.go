@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
 )
 
@@ -54,7 +55,8 @@ func parseFlags() (string, bool) {
 
 func runScrobbler(nostrClient *Nostr) error {
 	var lastTrack string
-	const sleepDuration = 30 * time.Second
+	const sleepDuration = 10 * time.Second
+	const resubmitThreshold = 10 * time.Minute
 
 	for {
 		if err := waitForCmus(); err != nil {
@@ -69,18 +71,58 @@ func runScrobbler(nostrClient *Nostr) error {
 			time.Sleep(sleepDuration)
 			continue
 		}
+		if scrobble.Track == "" {
+			time.Sleep(sleepDuration)
+			continue
+		}
 
 		currentTrack := fmt.Sprintf("%s - %s", scrobble.Artist, scrobble.Track)
 		if currentTrack != lastTrack {
-			if err := createAndPublishScrobble(nostrClient, scrobble); err != nil {
-				fmt.Println("Error with scrobble event:", err)
+			lastEvent, err := nostrClient.GetLastScrobble()
+			if err != nil {
+				fmt.Println("Error getting last scrobble:", err)
 			} else {
-				lastTrack = currentTrack
+				shouldSubmit := true
+				if lastEvent != nil {
+					lastEventTime := time.Unix(int64(lastEvent.CreatedAt), 0)
+					timeSinceLastEvent := time.Since(lastEventTime)
+					lastEventTrack := getTrackFromEvent(lastEvent)
+
+					if timeSinceLastEvent < resubmitThreshold && lastEventTrack == currentTrack {
+						shouldSubmit = false
+						lastTrack = lastEvent.Content
+						fmt.Println("Skipping submission: Recent duplicate track")
+					}
+				}
+
+				if shouldSubmit {
+					if err := createAndPublishScrobble(nostrClient, scrobble); err != nil {
+						fmt.Println("Error with scrobble event:", err)
+					} else {
+						lastTrack = currentTrack
+					}
+				}
 			}
 		}
 
 		time.Sleep(sleepDuration)
 	}
+}
+
+func getTrackFromEvent(event *nostr.Event) string {
+	artist := ""
+	track := ""
+	for _, tag := range event.Tags {
+		if len(tag) >= 2 {
+			switch tag[0] {
+			case "artist":
+				artist = tag[1]
+			case "track":
+				track = tag[1]
+			}
+		}
+	}
+	return fmt.Sprintf("%s - %s", artist, track)
 }
 
 func createAndPublishScrobble(nostrClient *Nostr, scrobble ScrobbleEvent) error {

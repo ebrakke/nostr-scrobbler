@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -20,31 +21,28 @@ func isCmusPlaying() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return strings.HasPrefix(status, "status playing"), nil
+	return status.Status == "playing", nil
 }
 
-func getCmusStatus() (string, error) {
+func hasPlayedLongEnough(status CmusOutput) bool {
+	return status.Position > 30
+}
+
+func getCmusStatus() (CmusOutput, error) {
 	cmd := exec.Command("cmus-remote", "-Q")
 	output, err := cmd.Output()
 	if err != nil {
-		return "", err
+		return CmusOutput{}, err
 	}
 
 	status := string(output)
-	lines := strings.Split(status, "\n")
-	if len(lines) == 0 {
-		return "", fmt.Errorf("unexpected empty output from cmus-remote")
-	}
-	return status, nil
+	return parseCmusStatus(status)
 }
 
-func getTags(cmusStatus string) (map[string]string, error) {
+func getTags(cmusStatus CmusOutput) (map[string]string, error) {
 	tags := make(map[string]string)
-	for _, line := range strings.Split(cmusStatus, "\n") {
-		parts := strings.SplitN(line, " ", 3)
-		if parts[0] == "tag" && len(parts) == 3 {
-			tags[parts[1]] = strings.TrimSpace(parts[2])
-		}
+	for key, value := range cmusStatus.Tags {
+		tags[key] = value
 	}
 	return tags, nil
 }
@@ -58,6 +56,10 @@ func getCurrentTrack() (ScrobbleEvent, error) {
 	tags, err := getTags(status)
 	if err != nil {
 		return ScrobbleEvent{}, err
+	}
+
+	if !hasPlayedLongEnough(status) {
+		return ScrobbleEvent{}, nil
 	}
 
 	return ScrobbleEvent{
@@ -86,4 +88,44 @@ func waitForCmus() error {
 	}
 
 	return nil
+}
+
+type CmusOutput struct {
+	Status   string
+	Position int
+	Tags     map[string]string
+}
+
+func parseCmusStatus(status string) (CmusOutput, error) {
+	lines := strings.Split(status, "\n")
+	output := CmusOutput{
+		Tags: make(map[string]string),
+	}
+
+	for _, line := range lines {
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key, value := parts[0], strings.TrimSpace(parts[1])
+
+		switch key {
+		case "status":
+			output.Status = value
+		case "position":
+			position, err := strconv.Atoi(value)
+			if err != nil {
+				return CmusOutput{}, fmt.Errorf("failed to parse position: %w", err)
+			}
+			output.Position = position
+		case "tag":
+			tagParts := strings.SplitN(value, " ", 2)
+			if len(tagParts) == 2 {
+				output.Tags[tagParts[0]] = strings.TrimSpace(tagParts[1])
+			}
+		}
+	}
+
+	return output, nil
 }

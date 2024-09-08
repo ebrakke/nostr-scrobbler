@@ -43,19 +43,25 @@ func LoadConfig(configPath string) (Config, error) {
 	}
 
 	if config.Nsec == "" {
-		return generateNewConfig(configPath)
+		return generateNewConfig(configPath, true)
 	}
 
 	return config, nil
 }
 
-func generateNewConfig(configPath string) (Config, error) {
-	sk := nostr.GeneratePrivateKey()
-	nsec, _ := nip19.EncodePrivateKey(sk)
+func generateNewConfig(configPath string, generateKey bool) (Config, error) {
 
 	config := Config{
-		Nsec:   nsec,
-		Relays: []string{},
+		Nsec: "",
+		Relays: []string{
+			"wss://relay.nostr-music.cc",
+		},
+	}
+
+	if generateKey {
+		sk := nostr.GeneratePrivateKey()
+		nsec, _ := nip19.EncodePrivateKey(sk)
+		config.Nsec = nsec
 	}
 
 	data, err := yaml.Marshal(config)
