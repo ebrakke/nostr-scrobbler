@@ -66,23 +66,24 @@ async function fetchNowPlaying(): Promise<any> {
   const response = await fetch(url);
   const data = await response.json();
   const mostRecent = data.recenttracks.track[0];
-  if (mostRecent["@attr"] && mostRecent["@attr"].nowplaying === "true") {
-    return mostRecent;
-  }
-  return null;
+  return mostRecent;
 }
 
 // Function to convert Last.fm scrobble to Nostr event
 function scrobbleToNostrEvent(scrobble: any, ndk: NDK): NDKEvent {
   const content = `${scrobble.name} by ${scrobble.artist["#text"]}`;
   const tags = [
-    ["i", `mbid:recording:${scrobble.mbid}`],
-    ["i", `mbid:release:${scrobble.album.mbid}`],
     ["r", scrobble.image[2]["#text"]],
     ["artist", scrobble.artist["#text"]],
     ["album", scrobble.album["#text"]],
     ["track", scrobble.name],
   ];
+  if (scrobble.mbid) {
+    tags.push(["i", `mbid:recording:${scrobble.mbid}`]);
+  }
+  if (scrobble.album.mbid) {
+    tags.push(["i", `mbid:release:${scrobble.album.mbid}`]);
+  }
 
   const event = new NDKEvent(ndk);
   event.kind = 2002;
@@ -118,12 +119,14 @@ const nowPlaying$ = merge(
   shareReplay(1)
 );
 
-const event$ = nowPlaying$.pipe(
+const event$$ = new Subject<NDKEvent>();
+const event$ = merge(event$$, nowPlaying$.pipe(
   withLatestFrom(lastPlayed$$, ndk$),
   filter(([nowPlaying, lastPlaying]) => nowPlaying.content !== lastPlaying),
   map(([nowPlaying, _, ndk]) => scrobbleToNostrEvent(nowPlaying, ndk!)),
+  tap((event) => setLastEvent(event)),
   shareReplay(1)
-);
+));
 
 const publish$ = publishEventQueue$$.pipe(
   debounceTime(1000),
@@ -160,7 +163,7 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
   } else if (request.type === "publish") {
     publishEventQueue$$.next();
     return true;
-  }
+  } 
 });
 
 // Update the onInstalled listener
@@ -186,6 +189,15 @@ async function getIsSyncing() {
   return isSyncing;
 }
 
+async function getLastEvent() {
+  const { lastEvent } = await chrome.storage.local.get("lastEvent");
+  return lastEvent;
+}
+
+async function setLastEvent(event: NDKEvent) {
+  await chrome.storage.local.set({ lastEvent: event.rawEvent() });
+}
+
 function sendEventMessage(e: NDKEvent) {
   chrome.runtime.sendMessage({ type: "event", event: e.rawEvent() });
 }
@@ -200,7 +212,11 @@ getConfig().then(async (c) => {
     await setIsSyncing(false);
     config$$.next(c);
     await initializeNDK(c);
-    event$.subscribe((e) => sendEventMessage(e));
+    const ndk = ndk$$.getValue();
+    event$.subscribe((e) => {
+      sendEventMessage(e);
+      setLastEvent(e);
+    });
     publish$.subscribe((e) => console.log("Published event", e));
     lastScrobbled$.subscribe((e) => {
       if (e) {
@@ -208,6 +224,11 @@ getConfig().then(async (c) => {
       }
     });
     nowPlaying$.subscribe((n) => console.log("Now playing", n));
+    const lastEvent = await getLastEvent();
+    if (lastEvent) {
+      console.log("Last event", lastEvent);
+      event$$.next(new NDKEvent(ndk!, lastEvent));
+    }
   } else {
     chrome.runtime.openOptionsPage();
   }

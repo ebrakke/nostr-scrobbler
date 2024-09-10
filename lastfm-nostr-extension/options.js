@@ -1,5 +1,6 @@
 import "./style.css";
-import './LastfmNostrForm';
+import LastfmNostrForm from './LastfmNostrForm.svelte';
+
 
 function handleSaveConfig(config) {
     chrome.runtime.sendMessage({type: 'saveConfig', config:{
@@ -10,6 +11,7 @@ function handleSaveConfig(config) {
     }}, (response) => {
         if (response && response.success) {
             console.log('Configuration saved successfully');
+            window.close();
         } else {
             console.error('Failed to save configuration');
         }
@@ -19,16 +21,18 @@ function handleSaveConfig(config) {
 function loadConfig() {
     chrome.storage.local.get('config', (result) => {
         console.log('Configuration loaded', result);
-        if (result.config) {
-            console.log('Configuration loaded', result.config);
-            document.getElementById('lastfm-nostr-form').lastfm_api_key = result.config.LASTFM_API_KEY;
-            document.getElementById('lastfm-nostr-form').username = result.config.LASTFM_USERNAME;
-            document.getElementById('lastfm-nostr-form').nsec = result.config.NOSTR_NSEC;
-            document.getElementById('lastfm-nostr-form').relayUrl = result.config.RELAY_URL;
-        }
+        const lastfmNostrFormSvelte = new LastfmNostrForm({
+            target: document.getElementById('lastfm-nostr-form-svelte'),
+            props: {
+                lastfm_api_key: result.config.LASTFM_API_KEY,
+                username: result.config.LASTFM_USERNAME,
+                nsec: result.config.NOSTR_NSEC,
+                relayUrl: result.config.RELAY_URL,
+                handleSaveConfig: handleSaveConfig
+            }
+        });
     });
 }
 
 
-document.getElementById('lastfm-nostr-form').handleSaveConfig = handleSaveConfig;
 loadConfig();

@@ -10,6 +10,7 @@
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "2.0.0-beta.25",
+    "@sveltejs/vite-plugin-svelte": "^3.1.2",
     "@types/chrome": "^0.0.270",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.45",
@@ -23,6 +24,7 @@
     "alpinejs": "^3.14.1",
     "lit": "^3.2.0",
     "nostr-tools": "^2.7.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "svelte": "^4.2.19"
   }
 }

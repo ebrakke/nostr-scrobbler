@@ -5,6 +5,7 @@ export default {
     "./options.html",
     "./LastfmNostrForm.js",
     './LastfmNostrPlayer.js',
+    './*.svelte',
   ],
   theme: {
     extend: {},

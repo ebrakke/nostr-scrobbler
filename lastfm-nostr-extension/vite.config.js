@@ -1,10 +1,11 @@
 import { defineConfig } from 'vite'
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { crx } from '@crxjs/vite-plugin'
 import manifest from './manifest.json'
 import tailwind from 'tailwindcss'
 
 export default defineConfig({
-  plugins: [crx({ manifest })],
+  plugins: [svelte({}), crx({ manifest })],
   css: {
     postcss: {
       plugins: [tailwind()],
