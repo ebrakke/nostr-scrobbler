@@ -6,6 +6,24 @@
 </head>
   <body class="flex items-center justify-center min-h-screen bg-gradient-to-br from-cyan-950 via-cyan-600 to-cyan-950">
     <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-60"></div>
-    <lastfm-nostr-form id="lastfm-nostr-form" class="relative z-10" ></lastfm-nostr-form>
+    
+    <div class="relative z-10 w-full max-w-xl text-white">
+      <h1 class="text-2xl font-bold mb-4 text-center text-pink-300">Last.fm Nostr Extension</h1>
+      
+      <div class="mb-6 p-4 bg-gradient-to-r from-purple-900/70 to-pink-900/70 rounded-lg backdrop-blur-sm shadow-lg">
+        <h2 class="text-lg font-medium mb-2 text-pink-200">Quick Setup Guide</h2>
+        <ol class="list-decimal list-inside text-sm text-cyan-100 space-y-1">
+          <li>Visit <a href="https://www.last.fm/api/account/create" target="_blank" class="text-pink-300 hover:underline">Last.fm API Account Creation</a></li>
+          <li>Log in (or create an account)</li>
+          <li>Fill out the application form</li>
+          <li>Submit to receive your API key</li>
+          <li>Use the key in the form below</li>
+        </ol>
+      </div>
+
+      <div class="bg-gradient-to-r from-cyan-900/80 to-purple-900/80 p-6 rounded-lg shadow-lg backdrop-blur-sm">
+        <lastfm-nostr-form id="lastfm-nostr-form"></lastfm-nostr-form>
+      </div>
+    </div>
   </body>
 </html>

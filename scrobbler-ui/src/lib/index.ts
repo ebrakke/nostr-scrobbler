@@ -21,6 +21,7 @@ export function groupEventsByArtist(events: NDKEvent[]): ArtistPlayCount[] {
 			if (!artistData[artist]) {
 				artistData[artist] = {
 					artist,
+					imageUrl: event.tags.find((tag) => tag[0] === 'r')?.[1],
 					playCount: 0,
 					lastStreamedAt: 0
 				};
@@ -46,20 +47,8 @@ export const sortedEvents = derived(events, ($events) =>
 
 export const artists = derived(events, ($events) => groupEventsByArtist($events));
 export const recentlyPlayedArtists = derived(events, ($events) => {
-	const recentArtists = new Set();
 	const recentEvents = $events.slice(0, 100); // Get the last 100 events
-
-	recentEvents.forEach((event) => {
-		const artist = event.tags.find((tag) => tag[0] === 'artist')?.[1];
-		if (artist) {
-			recentArtists.add(artist);
-		}
-	});
-	return Array.from(recentArtists).map((artist) => ({
-		artist,
-		playCount: 0,
-		lastStreamedAt: 0
-	} as ArtistPlayCount));
+	return groupEventsByArtist(recentEvents);
 });
 
 export async function fetchUserEvents(npub: string) {

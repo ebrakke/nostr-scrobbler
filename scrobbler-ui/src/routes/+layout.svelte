@@ -109,7 +109,7 @@
 						>
 							<div>
 							{#if art}
-								<img src={art} class="w-16 h-16 rounded-full" alt="album art" />
+								<img src={art} class="w-16 h-16 rounded-md" alt="album art" />
 							{/if}
 							</div>
 							<div class="flex justify-between items-start w-full">
@@ -138,7 +138,7 @@
 						class="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors duration-300 shadow-md flex items-center gap-x-2"
 					>
 						{#if art}
-							<img src={art} class="w-16 h-16 rounded-full" alt="album art" />
+							<img src={art} class="w-16 h-16 rounded-md" alt="album art" />
 						{/if}
 						<div class="flex justify-between items-start w-full">
 							<div>
@@ -156,7 +156,7 @@
 		</div>
 		<div>
 			<h2 class="text-2xl font-bold mb-6">Recently Played Artists 🎸</h2>
-			<Artists artists={$recentlyPlayedArtists.slice(0, 5)} />
+			<Artists artists={$recentlyPlayedArtists.slice(0, 25)} />
 		</div>
 	{:else if user}
 		<p class="text-gray-600">No events found for this user.</p>

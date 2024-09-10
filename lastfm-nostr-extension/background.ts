@@ -11,6 +11,8 @@ import {
   BehaviorSubject,
   combineLatest,
   of,
+  concat,
+  merge,
 } from "rxjs";
 import {
   switchMap,
@@ -22,6 +24,7 @@ import {
   map,
   debounceTime,
   startWith,
+  take,
 } from "rxjs/operators";
 
 type Config = {
@@ -100,13 +103,14 @@ async function fetchLatestEvent(ndk: NDK) {
   return Array.from(events.values())[0];
 }
 
-const nowPlaying$ = interval(INTERVAL).pipe(
+const nowPlaying$ = merge(
+  isSyncing$$.pipe(filter(Boolean), tap(() => console.log("Syncing"))),
+  interval(INTERVAL)
+).pipe(
   withLatestFrom(config$$, isSyncing$$, ndk$),
   filter(
     ([_, config, isSyncing]) =>
-      isSyncing &&
-      !!config?.LASTFM_API_KEY &&
-      !!config?.LASTFM_USERNAME
+      isSyncing && !!config?.LASTFM_API_KEY && !!config?.LASTFM_USERNAME
   ),
   switchMap(() => from(fetchNowPlaying())),
   filter((nowPlaying) => !!nowPlaying),
@@ -136,13 +140,12 @@ const lastScrobbled$ = combineLatest([
   switchMap(([_, event, ndk]) => {
     if (event) {
       return of(event);
-    } 
+    }
     return from(fetchLatestEvent(ndk));
   }),
   filter((event) => !!event),
   shareReplay(1)
 );
-
 
 chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
   if (request.type === "saveConfig") {
