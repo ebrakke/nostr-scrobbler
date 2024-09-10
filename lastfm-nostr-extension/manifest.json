@@ -1,0 +1,23 @@
+{
+    "manifest_version": 3,
+    "name": "Last.fm Nostr Extension",
+    "version": "0.0.1",
+    "action": { "default_popup": "popup.html" },
+    "background": { "service_worker": "background.ts" },
+    "permissions": [
+        "storage",
+        "tabs"
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "assets/*"
+            ],
+            "matches": ["<all_urls>"]
+        }
+    ],
+    "options_ui": {
+        "page": "options.html",
+        "open_in_tab": true
+    }
+  }

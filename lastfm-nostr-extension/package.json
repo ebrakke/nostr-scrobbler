@@ -1,0 +1,28 @@
+{
+  "name": "lastfm-nostr-extension",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "2.0.0-beta.25",
+    "@types/chrome": "^0.0.270",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.45",
+    "tailwindcss": "^3.4.10",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.1"
+  },
+  "dependencies": {
+    "@alpinejs/csp": "^3.14.1",
+    "@nostr-dev-kit/ndk": "^2.10.0",
+    "alpinejs": "^3.14.1",
+    "lit": "^3.2.0",
+    "nostr-tools": "^2.7.2",
+    "rxjs": "^7.8.1"
+  }
+}

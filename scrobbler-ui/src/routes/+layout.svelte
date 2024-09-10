@@ -26,7 +26,10 @@
 
 		$sortedEvents.forEach((event) => {
 			if (now - (event.created_at || 0) <= recentThreshold) {
-				if (!userTracks[event.pubkey] || (event.created_at || 0) > (userTracks[event.pubkey].created_at || 0)) {
+				if (
+					!userTracks[event.pubkey] ||
+					(event.created_at || 0) > (userTracks[event.pubkey].created_at || 0)
+				) {
 					userTracks[event.pubkey] = event;
 				}
 			}
@@ -51,7 +54,8 @@
 		const artist = event.tags.find((tag) => tag[0] === 'artist')?.[1] || 'Unknown Artist';
 		const track = event.tags.find((tag) => tag[0] === 'track')?.[1] || 'Unknown Track';
 		const scrobbledBy = event.pubkey;
-		return { artist, track, scrobbledBy };
+		const art = event.tags.find((tag) => tag[0] === 'r')?.[1];
+		return { artist, track, scrobbledBy, art };
 	}
 
 	onMount(async () => {
@@ -59,7 +63,6 @@
 		await userNdk.connect();
 		fetchAllEvents();
 	});
-
 </script>
 
 <slot />
@@ -99,13 +102,15 @@
 			<div class="mb-2">
 				<h2 class="text-2xl font-bold mb-6">Currently Listening Users 🎧</h2>
 				<div class="space-y-4">
-					{#each Object.entries(currentlyListeningUsers) as [pubkey, event]}
-						{@const { artist, track } = getTrackInfo(event)}
+					{#each Object.entries(currentlyListeningUsers) as [pubkey, event] (event.id)}
+						{@const { artist, track, art } = getTrackInfo(event)}
 						<div
-							class="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors duration-300 shadow-md flex w-full items-center"
+							class="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors duration-300 shadow-md flex w-full items-center gap-x-4"
 						>
-							<div class="mr-4 w-16 h-16">
-								<Avatar pubkey={pubkey} ndk={userNdk} class="rounded-full" />
+							<div>
+							{#if art}
+								<img src={art} class="w-16 h-16 rounded-full" alt="album art" />
+							{/if}
 							</div>
 							<div class="flex justify-between items-start w-full">
 								<div>
@@ -113,9 +118,11 @@
 									<p class="text-gray-400">{track}</p>
 									<p class="text-gray-400">{artist}</p>
 								</div>
-								<span class="text-sm text-gray-500 bg-gray-900 px-2 py-1 rounded-full">
-									{formatDate(event.created_at)}
-								</span>
+								<div>
+									<div class="mr-4 w-16 h-16 hidden md:block">
+										<Avatar {pubkey} ndk={userNdk} class="rounded-full" />
+									</div>
+								</div>
 							</div>
 						</div>
 					{/each}
@@ -125,12 +132,15 @@
 		<div>
 			<h2 class="text-2xl font-bold mb-6">Recently Played Tracks 🎵</h2>
 			<div class="space-y-4">
-				{#each $sortedEvents.slice(0, 10) as event}
-					{@const { artist, track, scrobbledBy } = getTrackInfo(event)}
+				{#each $sortedEvents.slice(0, 10) as event (event.id)}
+					{@const { artist, track, scrobbledBy, art } = getTrackInfo(event)}
 					<div
-						class="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors duration-300 shadow-md"
+						class="bg-gray-800 rounded-lg p-4 hover:bg-gray-700 transition-colors duration-300 shadow-md flex items-center gap-x-2"
 					>
-						<div class="flex justify-between items-start">
+						{#if art}
+							<img src={art} class="w-16 h-16 rounded-full" alt="album art" />
+						{/if}
+						<div class="flex justify-between items-start w-full">
 							<div>
 								<h3 class="text-lg font-semibold text-white">{track}</h3>
 								<p class="text-gray-400">{artist}</p>
