@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/fiatjaf/eventstore/lmdb"
@@ -100,6 +104,12 @@ func main() {
 		renderStats(w, stats)
 	})
 
+	mux.HandleFunc("/backups", func(w http.ResponseWriter, r *http.Request) {
+		renderBackups(w)
+	})
+
+	mux.HandleFunc("/backups/", serveBackup)
+
 	log.Printf("Starting server on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, relay))
 }
@@ -181,6 +191,8 @@ func renderStats(w http.ResponseWriter, stats *ScrobbleStats) {
             <input type="text" name="relay" placeholder="Enter relay URL" class="p-2 border rounded mr-2">
             <button type="submit" class="bg-blue-500 text-white p-2 rounded">Connect</button>
         </form>
+
+		<div hx-get="/backups" hx-trigger="load" class="mb-8 bg-white p-6 rounded-lg shadow"></div>
 
         {{range $relayURL, $relay := .Relays}}
         <div class="mb-8">
@@ -292,6 +304,101 @@ func renderStats(w http.ResponseWriter, stats *ScrobbleStats) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+type BackupFile struct {
+	Name string
+	Size string
+}
+
+func renderBackups(w http.ResponseWriter) {
+	backups, err := listBackups("./backups") // Adjust the path as needed
+	if err != nil {
+		http.Error(w, "Failed to list backups", http.StatusInternalServerError)
+		return
+	}
+	tmpl := `
+	<h3 class="text-2xl font-semibold mb-4">Available Backups (LMDB)</h3>
+	<ul class="space-y-2">
+		{{range .}}
+		<li>
+			<a href="/backups/{{.Name}}" class="text-blue-500 hover:underline" download>{{.Name}} ({{.Size}})</a>
+		</li>
+		{{else}}
+		<li>No backups available</li>
+		{{end}}
+	</ul>
+	`
+
+	t, err := template.New("backups").Parse(tmpl)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = t.Execute(w, backups)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func listBackups(dir string) ([]BackupFile, error) {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	var backups []BackupFile
+	for _, file := range files {
+		if strings.HasSuffix(file.Name(), ".zip") {
+			info, err := file.Info()
+			if err != nil {
+				continue
+			}
+			size := formatFileSize(info.Size())
+			backups = append(backups, BackupFile{Name: file.Name(), Size: size})
+		}
+	}
+
+	// Sort backups by modification time (newest first)
+	sort.Slice(backups, func(i, j int) bool {
+		iInfo, _ := os.Stat(filepath.Join(dir, backups[i].Name))
+		jInfo, _ := os.Stat(filepath.Join(dir, backups[j].Name))
+		return iInfo.ModTime().After(jInfo.ModTime())
+	})
+
+	return backups, nil
+}
+
+func formatFileSize(size int64) string {
+	const unit = 1024
+	if size < unit {
+		return fmt.Sprintf("%d B", size)
+	}
+	div, exp := int64(unit), 0
+	for n := size / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
+}
+
+func serveBackup(w http.ResponseWriter, r *http.Request) {
+	filename := filepath.Base(r.URL.Path)
+	filePath := filepath.Join("./backups", filename)
+
+	// Check if the file exists and is within the backups directory
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Set headers for file download
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	w.Header().Set("Content-Type", "application/zip")
+
+	// Serve the file
+	http.ServeFile(w, r, filePath)
 }
 
 // Helper function to get environment variables with a default value

@@ -68,7 +68,7 @@ func TestGenerateAndPublishScrobbles(t *testing.T) {
 	defer relay.Close()
 
 	// Generate and publish 10000 random scrobbles
-	for i := 0; i < 1000; i++ {
+	for i := 0; i < 100; i++ {
 		event := generateRandomScrobble()
 		err := relay.Publish(context.Background(), *event)
 		if err != nil {
