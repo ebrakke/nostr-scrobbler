@@ -1,0 +1,18 @@
+[2024-09-19T22:56:50.189Z] Error
+    at settle (/home/erik/code/nostr/scrobbler/spotify-plugin/node_modules/axios/lib/core/settle.js:19:12)
+    at handleStreamEnd (/home/erik/code/nostr/scrobbler/spotify-plugin/node_modules/axios/lib/adapters/http.js:599:11)
+    at emit (native)
+    at endReadableNT (native)
+    at processTicksAndRejections (native)
+    at <anonymous> (/home/erik/code/nostr/scrobbler/spotify-plugin/node_modules/axios/lib/core/Axios.js:45:41)
+    at processTicksAndRejections (native)
+[2024-09-19T22:57:21.219Z] Request failed with status code 401
+[2024-09-19T22:58:01.186Z] Request failed with status code 401
+[2024-09-19T22:58:05.835Z] Request failed with status code 401
+[2024-09-19T22:58:10.802Z] Request failed with status code 401
+[2024-09-19T22:59:39.921Z] Request failed with status code 401
+[2024-09-19T23:00:55.799Z] Request failed with status code 401
+[2024-09-19T23:00:56.756Z] Request failed with status code 401
+[2024-09-19T23:02:02.960Z] Request failed with status code 401
+[2024-09-19T23:02:06.519Z] Request failed with status code 401
+[2024-09-19T23:02:07.695Z] Request failed with status code 401

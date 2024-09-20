@@ -1,0 +1,12 @@
+{
+  "name": "spotify-now-playing",
+  "version": "1.0.0",
+  "description": "Chrome extension to display currently playing song on Spotify",
+  "scripts": {
+    "build": "bun build background.js popup.js --outdir=dist"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}

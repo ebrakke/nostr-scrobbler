@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html/template"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -59,10 +59,15 @@ func (s *ScrobbleStats) AddScrobble(relayURL, pubkey, artist, track string) {
 }
 
 func main() {
+	// Set up structured logging
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
 	// Load .env file
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		slog.Error("Error loading .env file", "error", err)
+		os.Exit(1)
 	}
 
 	stats := NewScrobbleStats()
@@ -79,7 +84,8 @@ func main() {
 		Path:     dbPath,
 	}
 	if err := db.Init(); err != nil {
-		panic(err)
+		slog.Error("Failed to initialize database", "error", err)
+		os.Exit(1)
 	}
 	relay.StoreEvent = append(relay.StoreEvent, db.SaveEvent)
 	relay.DeleteEvent = append(relay.DeleteEvent, db.DeleteEvent)
@@ -91,7 +97,7 @@ func main() {
 		}
 		return false, ""
 	})
-	go collectSelfStats(stats, relay)
+	go collectSelfStats(stats, &db, relay.Info.URL)
 	mux := relay.Router()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -110,14 +116,17 @@ func main() {
 
 	mux.HandleFunc("/backups/", serveBackup)
 
-	log.Printf("Starting server on :%s", port)
-	log.Fatal(http.ListenAndServe(":"+port, relay))
+	slog.Info("Starting server", "port", port)
+	if err := http.ListenAndServe(":"+port, relay); err != nil {
+		slog.Error("Server failed to start", "error", err)
+		os.Exit(1)
+	}
 }
 
 func collectStats(stats *ScrobbleStats, relayURL string) {
 	relay, err := nostr.RelayConnect(context.Background(), relayURL)
 	if err != nil {
-		log.Printf("Failed to connect to relay %s: %v", relayURL, err)
+		slog.Error("Failed to connect to relay", "url", relayURL, "error", err)
 		return
 	}
 
@@ -126,7 +135,8 @@ func collectStats(stats *ScrobbleStats, relayURL string) {
 		Limit: 10000,
 	}})
 	if err != nil {
-		log.Fatalf("Failed to subscribe: %v", err)
+		slog.Error("Failed to subscribe", "url", relayURL, "error", err)
+		return
 	}
 
 	for ev := range sub.Events {
@@ -136,25 +146,22 @@ func collectStats(stats *ScrobbleStats, relayURL string) {
 	}
 }
 
-func collectSelfStats(stats *ScrobbleStats, relay *khatru.Relay) {
-	r, err := nostr.RelayConnect(context.Background(), relay.Info.URL)
+func collectSelfStats(stats *ScrobbleStats, db *lmdb.LMDBBackend, url string) {
+
+	filters := nostr.Filter{
+		Kinds: []int{2002},
+		Limit: 10000,
+	}
+	events, err := db.QueryEvents(context.Background(), filters)
 	if err != nil {
-		log.Printf("Failed to connect to relay %s: %v", relay.Info.URL, err)
+		slog.Error("Failed to query events", "error", err)
 		return
 	}
 
-	sub, err := r.Subscribe(context.Background(), []nostr.Filter{{
-		Kinds: []int{2002},
-		Limit: 10000,
-	}})
-	if err != nil {
-		log.Fatalf("Failed to subscribe: %v", err)
-	}
-
-	for ev := range sub.Events {
+	for ev := range events {
 		artist := getTagValue(ev.Tags, "artist")
 		track := getTagValue(ev.Tags, "track")
-		stats.AddScrobble(relay.Info.URL, ev.PubKey, artist, track)
+		stats.AddScrobble(url, ev.PubKey, artist, track)
 	}
 }
 
@@ -293,7 +300,8 @@ func renderStats(w http.ResponseWriter, stats *ScrobbleStats) {
 
 	t, err := template.New("stats").Funcs(funcMap).Parse(tmpl)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("Failed to parse template", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
@@ -302,7 +310,8 @@ func renderStats(w http.ResponseWriter, stats *ScrobbleStats) {
 
 	err = t.Execute(w, stats)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("Failed to execute template", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
 
@@ -314,7 +323,8 @@ type BackupFile struct {
 func renderBackups(w http.ResponseWriter) {
 	backups, err := listBackups("./backups") // Adjust the path as needed
 	if err != nil {
-		http.Error(w, "Failed to list backups", http.StatusInternalServerError)
+		slog.Error("Failed to list backups", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 	tmpl := `
@@ -332,13 +342,15 @@ func renderBackups(w http.ResponseWriter) {
 
 	t, err := template.New("backups").Parse(tmpl)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("Failed to parse backups template", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	err = t.Execute(w, backups)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		slog.Error("Failed to execute backups template", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
 
